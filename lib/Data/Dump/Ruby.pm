@@ -1,4 +1,4 @@
-package Data::Dump::PHP;
+package Data::Dump::Ruby;
 use strict;
 use vars qw(@EXPORT @EXPORT_OK $DEBUG);
 use subs qq(dump);
@@ -11,8 +11,8 @@ use subs qq(dump);
 
 require Exporter;
 *import = \&Exporter::import;
-@EXPORT = qw(dd_php ddx_php);
-@EXPORT_OK = qw(dump_php pp_php quote_php);
+@EXPORT = qw(dd_ruby ddx_ruby);
+@EXPORT_OK = qw(dump_ruby pp_ruby quote_ruby);
 
 $DEBUG = 0;
 
@@ -69,7 +69,7 @@ sub dump
 
     my $out = "";
     if (%require) {
-	die "BUG: should not require() for PHP";
+	die "BUG: should not require() for Ruby";
         for (sort keys %require) {
 	    $out .= "require $_;\n";
 	}
@@ -79,31 +79,27 @@ sub dump
 	for (@dump) {
 	    my $name = $_->[0];
 	    if ($refcnt{$name}) {
-		$out .= "\$$name = $_->[1];\n";
+		$out .= "$name = $_->[1]\n";
 		undef $_->[1];
 	    }
 	}
 	for (@fixup) {
-	    $out .= "$_;\n";
+	    $out .= "$_\n";
 	}
     }
 
     my $paren = (@dump != 1);
-    $out .= (@fixup ? "return ":"")."array(" if $paren;
+    $out .= (@fixup ? "":"")."[" if $paren;
     $out .= format_list($paren, undef,
-			map {defined($dump[$_][1]) ? $dump[$_][1] : (!$paren && $_ == @dump-1 ? "return ":"")."\$".$dump[$_][0]}
+			map {defined($dump[$_][1]) ? $dump[$_][1] : (!$paren && $_ == @dump-1 ? "":"").$dump[$_][0]}
 			    0..$#dump
 		       );
-    $out .= ")" if $paren;
+    $out .= "]" if $paren;
 
     if (%refcnt || %require) {
-        $out .= ";\n";
+        $out .= "\n";
 	$out =~ s/^/  /gm;  # indent
-	if ($USE_LAMBDA) {
-            $out = "call_user_func(function() { ".$out." })";
-        } else {
-            $out = "call_user_func(create_function('', ".quote($out)."))";
-        }
+        $out = "(Proc.new { $out }).call";
     }
 
     #use Data::Dumper;   print Dumper(\%refcnt);
@@ -113,14 +109,14 @@ sub dump
     $out;
 }
 
-*dump_php = \&dump;
-*pp_php = \&dump;
+*dump_ruby = \&dump;
+*pp_ruby = \&dump;
 
-sub dd_php {
+sub dd_ruby {
     print dump(@_), "\n";
 }
 
-sub ddx_php {
+sub ddx_ruby {
     my(undef, $file, $line) = caller;
     $file =~ s,.*[\\/],,;
     my $out = "$file:$line: " . dump(@_) . "\n";
@@ -158,8 +154,8 @@ sub _dump
 	    warn "SEEN: [\$$name(@$idx)] => [\$$sname(@$sidx)] ($ref,$sref)" if $DEBUG;
 	    return $sref unless $sname eq $name;
 	    $refcnt{$name}++;
-            push(@fixup, fullname($name,$idx) . " =& " . $sref);
-	    die "Can't handle returning references for PHP yet" if @$idx && $idx->[-1] eq '$';
+            push(@fixup, fullname($name,$idx) . " = " . $sref);
+	    die "Can't handle returning references for Ruby yet" if @$idx && $idx->[-1] eq '$';
             #return "do{my \$fix}" if @$idx && $idx->[-1] eq '$';
 	    return "'fix'";
 	}
@@ -177,6 +173,9 @@ sub _dump
 		    $mod = $1;
 		    $v = $2;
 		    $mod =~ s/-.*//;
+                    $mod =~ s/([sm])/
+                        $1 eq 'm' ? '' :
+                            ($1 eq 's' ? 'm' : '')/eg;
 		}
 
 		my $sep = '/';
@@ -195,18 +194,18 @@ sub _dump
 		}
 		$v =~ s/\Q$sep\E/\\$sep/g;
 
-		$out = quote("$sep$v$sep$mod");
+		$out = "\%r$sep$v$sep$mod";
 		undef($class);
 	    }
 	    else {
-		die "Can't handle non-Regexp builtin object (class $class) for PHP yet";
+		die "Can't handle non-Regexp builtin object (class $class) for Ruby yet";
                 delete $seen{$id} if $type eq "SCALAR";  # will be seen again shortly
 		my $val = _dump($$rval, $name, [@$idx, "\$"]);
 		$out = $class ? "do{\\(my \$o = $val)}" : "\\$val";
 	    }
 	} else {
 	    if (!defined $$rval) {
-		$out = "null";
+		$out = "nil";
 	    }
 	    elsif ($$rval =~ /^-?[1-9]\d{0,9}\z/ || $$rval eq "0") {
 		$out = $$rval;
@@ -215,7 +214,7 @@ sub _dump
 		$out = str($$rval);
 	    }
 	    if ($class && !@$idx) {
-                die "Can't handle nonref, class, nonidx for PHP yet";
+                die "Can't handle nonref, class, nonidx for Ruby yet";
                 # Top is an object, not a reference to one as perl needs
 		$refcnt{$name}++;
 		my $obj = fullname($name, $idx);
@@ -225,7 +224,7 @@ sub _dump
 	}
     }
     elsif ($type eq "GLOB") {
-	die "Can't handle glob for PHP yet";
+	die "Can't handle glob for Ruby yet";
         if ($ref) {
 	    delete $seen{$id};
 	    my $val = _dump($$rval, $name, [@$idx, "*"]);
@@ -254,18 +253,18 @@ sub _dump
     elsif ($type eq "ARRAY") {
 	my @vals;
 	my $tied = tied_str(tied(@$rval));
-	die "Can't handle tied arrayref for PHP yet" if $tied;
+	die "Can't handle tied arrayref for Ruby yet" if $tied;
 	my $i = 0;
 	for my $v (@$rval) {
 	    push(@vals, _dump($v, $name, [@$idx, "[$i]"], $tied));
 	    $i++;
 	}
-	$out = "array(" . format_list(1, $tied, @vals) . ")";
+	$out = "[" . format_list(1, $tied, @vals) . "]";
     }
     elsif ($type eq "HASH") {
 	my(@keys, @vals);
 	my $tied = tied_str(tied(%$rval));
-	die "Can't handle tied hashref for PHP yet" if $tied;
+	die "Can't handle tied hashref for Ruby yet" if $tied;
 
 	# statistics to determine variation in key lengths
 	my $kstat_max = 0;
@@ -326,7 +325,7 @@ sub _dump
 		}
 	    }
 	}
-	$out = "array($nl";
+	$out = "{$nl";
         $out .= "  # $tied$nl" if $tied;
 	while (@keys) {
 	    my $key = shift @keys;
@@ -337,14 +336,10 @@ sub _dump
 	    $out .= " $key => $val,$nl";
 	}
 	$out =~ s/,$/ / unless $nl;
-	$out .= ")";
+	$out .= "}";
     }
     elsif ($type eq "CODE") {
-	if ($USE_LAMBDA) {
-            $out = "function() {}";
-        } else {
-            $out = "create_function('', '')";
-        }
+        $out = "(Proc.new {})";
     }
     else {
 	warn "Can't handle $type data";
@@ -352,7 +347,7 @@ sub _dump
     }
 
     if ($class && $ref) {
-	die "Can't handle object (class $class) for PHP yet";
+	die "Can't handle object (class $class) for Ruby yet";
         $out = "bless($out, " . quote($class) . ")";
     }
     return $out;
@@ -374,7 +369,7 @@ sub tied_str {
 sub fullname
 {
     my($name, $idx, $ref) = @_;
-    substr($name, 0, 0) = "\$";
+    substr($name, 0, 0) = "";
 
     my @i = @$idx;  # need copy in order to not modify @$idx
     my @ci = @i;
@@ -384,14 +379,14 @@ sub fullname
     }
     while (@i && $i[0] eq "\$") {
 	shift @i;
-	$name = "\$$name";
+	$name = "$name";
     }
 
     my $last_was_index;
     for my $i (@i) {
 	if ($i eq "*" || $i eq "\$") {
 	    $last_was_index = 0;
-	    $name = "$i\{$name}";
+	    $name = "$i\[".quote($name)."]";
 	} elsif ($i =~ s/^\*//) {
 	    $name .= $i;
 	    $last_was_index++;
@@ -431,21 +426,22 @@ sub str {
           unless (/[^\Q$1\E]/) {
               my $base = quote($1);
               my $repeat = length;
-              return "str_repeat($base, $repeat)"
+              return "$base * $repeat"
           }
       }
       # Length protection because the RE engine will blow the stack [RT#33520]
       if (length($_) < 16 * 1024 && /^(.{2,5}?)\1*\z/s) {
 	  my $base   = quote($1);
 	  my $repeat = length($_)/length($1);
-	  return "str_repeat($base, $repeat)";
+	  return "$base * $repeat";
       }
       }
   }
 
   local $_ = &quote;
 
-  if (length($_) > 40  && !/\\x\{/ && length($_) > (length($_[0]) * 2)) {
+  # XXX disabled because base64 decoding requires module
+  if (0 && length($_) > 40  && !/\\x\{/ && length($_) > (length($_[0]) * 2)) {
       # too much binary data, better to represent as a hex/base64 string
 
       # Base64 is more compact than hex when string is longer than
@@ -454,8 +450,8 @@ sub str {
       if ($TRY_BASE64 && length($_[0]) > $TRY_BASE64 &&
 	  eval { require MIME::Base64 })
       {
-	  #$require{"MIME::Base64"}++;
-	  return "base64_decode(\"" .
+	  #$require{"base64"}++;
+	  return "Base64.decode64(\"" .
 	             MIME::Base64::encode($_[0],"") .
 		 "\")";
       }
@@ -468,9 +464,11 @@ sub str {
 my %esc = (
     "\t" => "\\t",
     "\n" => "\\n",
-    "\f" => "\\f",
     "\r" => "\\r",
-    "\x0b" => "\\v",
+    "\f" => "\\f",
+    "\b" => "\\b",
+    "\a" => "\\a",
+    "\e" => "\\e",
 );
 
 # put a string value in double quotes
@@ -480,7 +478,7 @@ sub quote {
   s/([\\\"\@\$])/\\$1/g;
   return qq("$_") unless /[^\040-\176]/;  # fast exit
 
-  s/([\t\n\f\r\x0b])/$esc{$1}/g;
+  s/([\t\n\r\f\b\a\e])/$esc{$1}/g;
 
   # no need for 3 digits in escape for these
   s/([\0-\037])(?!\d)/sprintf('\\%o',ord($1))/eg;
@@ -491,7 +489,7 @@ sub quote {
   return qq("$_");
 }
 
-*quote_php = \&quote;
+*quote_ruby = \&quote;
 
 1;
 
@@ -499,27 +497,25 @@ __END__
 
 =head1 NAME
 
-Data::Dump::PHP - Pretty printing of data structures as PHP code
+Data::Dump::Ruby - Pretty printing of data structures as Ruby code
 
 =head1 SYNOPSIS
 
- use Data::Dump::PHP qw(dump_php ddx_php);
+ use Data::Dump::Ruby qw(dump_ruby ddx_ruby);
 
  # in Perl
- $str = dump_php($var);
- $str2 = dump_php(@list);
+ $str = dump_ruby($var);
 
- # in PHP
- $var = eval("return $str;");
- $array = eval("return $str2;");
+ # in Ruby
+ var = eval str
 
  # or use it for easy debug printout
- ddx_php localtime;
+ ddx_ruby localtime;
 
 =head1 DESCRIPTION
 
 This module provide functions that takes a list of values as their
-argument and produces a string as its result.  The string contains PHP
+argument and produces a string as its result.  The string contains Ruby
 code that, when C<eval>ed, produces a deep copy of the original
 arguments.
 
@@ -527,11 +523,11 @@ The main feature of the module is that it strives to produce output
 that is easy to read.  Example:
 
     @a = (1, [2, 3], {4 => 5});
-    dump_php(@a);
+    dump_ruby(@a);
 
 Produces:
 
-    array(1, array(2, 3), array( 4 => 5 ))
+    [1, [2, 3], {4 => 5}]
 
 If you dump just a little data, it is output on a single line. If
 you dump data that is more complex or there is a lot of it, line breaks
@@ -541,52 +537,51 @@ The following functions are provided (only the dd* functions are exported by def
 
 =over
 
-=item dump_php( ... )
+=item dump_ruby( ... )
 
-=item pp_php( ... )
+=item pp_ruby( ... )
 
-Returns a string containing a PHP expression/code.  If you pass this
-string to PHP's built-in eval() function like this: eval("return
-$res;") or eval("\$a = $res;"), it should return a copy of the
-arguments you passed to dump_php().
+Returns a string containing a Ruby expression/code.  If you pass this
+string to Ruby's eval(), it should return a copy of the arguments you
+passed to dump_ruby().
 
 If you call the function with multiple arguments then the output will
-be wrapped in an outer array "array( ..., ... )".  If you call the
+be wrapped in an outer array [ ..., ..., ... ].  If you call the
 function with a single argument the output will not have the wrapping.
 If you call the function with a single scalar (non-reference) argument
 it will just return the scalar quoted if needed, but never break it
 into multiple lines.  If you pass multiple arguments or references to
 arrays of hashes then the return value might contain line breaks to
 format it for easier reading.  The returned string will never be "\n"
-terminated, even if contains multiple lines.  This allows PHP code
+terminated, even if contains multiple lines.  This allows Ruby code
 like this to place the semicolon in the expected place:
 
-   echo print '$obj = ', dump_php($obj), ";\n";
+   print 'obj = ', $res, "\n;"
 
-If dump_php() is called in void context, then the dump is printed on
+If dump_ruby() is called in void context, then the dump is printed on
 STDERR and then "\n" terminated.  You might find this useful for quick
 debug printouts, but the dd*() functions might be better alternatives
 for this.
 
-There is no difference between dump_php() and pp_php().
+There is no difference between dump_ruby() and pp_ruby().
 
-=item quote_php( $string )
+=item quote_ruby( $string )
 
 Returns a quoted version of the provided string.
 
-It differs from C<dd_php($string)> in that it will quote even numbers
+It differs from C<dd_ruby($string)> in that it will quote even numbers
 and not try to come up with clever expressions that might shorten the
 output.
 
-=item dd_php( ... )
+=item dd_ruby( ... )
 
-=item ddx_php( ... )
+=item ddx_ruby( ... )
 
-These functions will call dump_php() on their argument and print the
+These functions will call dump_ruby() on their argument and print the
 result to STDOUT (actually, it's the currently selected output handle,
 but STDOUT is the default for that).
 
-The difference between them is only that ddx_php() will prefix the
+The difference between them is only that ddx_ruby() will prefix the
 lines it prints with "# " and mark the first line with the file and
 line number where it was called.  This is meant to be useful for debug
 printouts of state within programs.
@@ -594,50 +589,38 @@ printouts of state within programs.
 =back
 
 
-=head1 OPTIONS
+=head1 BUGS/LIMITATIONS
 
-$Data::Dump::PHP::USE_LAMBDA (default 0) can be set to 1 to generate
-PHP code that uses lambda functions instead of create_function(),
-which is nicer and faster but requires PHP 5.3 or later.
+Code references will be displayed as simply "(Proc.new {})" when dumped.
+Thus, C<eval>ing them will not reproduce the original routine.
 
+Regexes in Ruby by default are multilines (e.g. /^foo/ in Perl means /\Afoo/ in
+Ruby and /^foo/m in Perl means /^foo/ in Ruby), this is not adjusted yet.
 
-=head1 LIMITATIONS
-
-Code references will be displayed as simply "create_function('', '')"
-(or "function(){}}") when dumped. Thus, C<eval>ing them will not
-reproduce the original routine.
-
-Regex objects in Perl will become string in PHP. If you want to use
-this string in PHP's PCRE functions, you need to make sure that the
-regex will be compatible.
 
 =head1 SEE ALSO
 
-L<Data::Dump> (from which this codebase is based)
+L<Data::Dump> and L<Data::Dump::PHP> (from which this codebase is based)
 
-L<PHP::Var> (I tried this first before hacking up Data::Dump::PHP, but
-it has bugs, doesn't do scalars, and doesn't handle recursion.)
-
-L<JSON>, L<YAML> - Another alternative to exchange data with PHP (and
+L<JSON>, L<YAML> - Another alternative to exchange data with Ruby (and
 other languages) is to export/import via YAML and JSON.
 
-L<PHP::Serializer> - Yet another way to exchange data with PHP using
-PHP serialization format.
 
 =head1 ACKNOWLEDGEMENTS
 
-Data::Dump::PHP is a quick hack (as I needed it for
-L<Data::Schema::Emitter::PHP>). I simply copied the code from Gisle
-Ass' wonderful C<Data::Dump> and changed only whatever is necessary.
+Data::Dump::Ruby is a quick hack. I simply copied the code from
+L<Data::Dump::PHP>, which was copied from Gisle Ass' wonderful C<Data::Dump> and
+changed only whatever is necessary.
+
 
 =head1 AUTHORS
 
-The C<Data::Dump::PHP> module is written by Steven Haryanto
+The C<Data::Dump::Ruby> module is written by Steven Haryanto
 <stevenharyanto@gmail.com>, based on C<Data::Dump> by Gisle Aas
 <gisle@aas.no>, based on C<Data::Dumper> by Gurusamy Sarathy
 <gsar@umich.edu>.
 
- Copyright 2010 Steven Haryanto.
+ Copyright 2011 Steven Haryanto.
  Copyright 1998-2000,2003-2004,2008 Gisle Aas.
  Copyright 1996-1998 Gurusamy Sarathy.
 

@@ -1,4 +1,4 @@
-package Data::Dump::PHP::Trace;
+package Data::Dump::Ruby::Trace;
 
 # Todo:
 #   - prototypes
@@ -55,7 +55,7 @@ sub wrap {
             name => $name,
             obj => $obj,
             proto => $arg{proto},
-        }, "Data::Dump::PHP::Trace::Wrapper";
+        }, "Data::Dump::Ruby::Trace::Wrapper";
     }
 
     croak("Either the 'func' or 'obj' option must be given");
@@ -72,7 +72,7 @@ sub call {
     my $name = shift;
     my $func = shift;
     my $proto = shift;
-    my $fmt = Data::Dump::PHP::Trace::Call->new($name, $proto, \@_);
+    my $fmt = Data::Dump::Ruby::Trace::Call->new($name, $proto, \@_);
     if (!defined wantarray) {
         $func->(@_);
         return $fmt->return_void(\@_);
@@ -91,7 +91,7 @@ sub mcall {
     my $proto = shift;
     return if $method eq "DESTROY" && !$o->can("DESTROY");
     my $oname = ref($o) ? $obj_name{overload::StrVal($o)} || "\$o" : $o;
-    my $fmt = Data::Dump::PHP::Trace::Call->new("$oname->$method", $proto, \@_);
+    my $fmt = Data::Dump::Ruby::Trace::Call->new("$oname->$method", $proto, \@_);
     if (!defined wantarray) {
         $o->$method(@_);
         return $fmt->return_void(\@_);
@@ -104,21 +104,21 @@ sub mcall {
     }
 }
 
-package Data::Dump::PHP::Trace::Wrapper;
+package Data::Dump::Ruby::Trace::Wrapper;
 
 sub AUTOLOAD {
     my $self = shift;
     our $AUTOLOAD;
     my $method = substr($AUTOLOAD, rindex($AUTOLOAD, '::')+2);
-    Data::Dump::PHP::Trace::mcall($self->{obj}, $method, $self->{proto}{$method}, @_);
+    Data::Dump::Ruby::Trace::mcall($self->{obj}, $method, $self->{proto}{$method}, @_);
 }
 
-package Data::Dump::PHP::Trace::Call;
+package Data::Dump::Ruby::Trace::Call;
 
 use Term::ANSIColor ();
-use Data::Dump::PHP ();
+use Data::Dump::Ruby ();
 
-*_dump = \&Data::Dump::PHP::dump;
+*_dump = \&Data::Dump::Ruby::dump;
 
 our %COLOR = (
     name => "yellow",
@@ -235,7 +235,7 @@ sub return_scalar {
     if ($name) {
         $name .= $name_count{$name} if $name_count{$name}++;
         print " = ", $self->color("output", $name), "\n";
-        $s = Data::Dump::PHP::Trace::wrap(name => $name, obj => $s, proto => $wrap->{proto});
+        $s = Data::Dump::Ruby::Trace::wrap(name => $name, obj => $s, proto => $wrap->{proto});
     }
     else {
         print " = ", $self->color("output", _dump($s));
@@ -273,11 +273,11 @@ __END__
 
 =head1 NAME
 
-Data::Dump::PHP::Trace - Helpers to trace function and method calls
+Data::Dump::Ruby::Trace - Helpers to trace function and method calls
 
 =head1 SYNOPSIS
 
-  use Data::Dump::PHP::Trace qw(autowrap mcall);
+  use Data::Dump::Ruby::Trace qw(autowrap mcall);
 
   autowrap("LWP::UserAgent" => "ua", "HTTP::Response" => "res");
 
@@ -397,13 +397,13 @@ traced.
 
 =head1 SEE ALSO
 
-L<Data::Dump::PHP>
+L<Data::Dump::Ruby>
 
 L<Data::Dump::Trace>
 
 =head1 AUTHOR
 
-Copyright 2010 Steven Haryanto.
+Copyright 2011 Steven Haryanto.
 
 This library is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.

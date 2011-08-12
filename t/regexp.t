@@ -1,6 +1,6 @@
 #!perl -w
 
-use Data::Dump::PHP;
+use Data::Dump::Ruby;
 use Test;
 plan tests => 1;
 
@@ -15,17 +15,17 @@ $a = {
    i => qr*/|,:#*,
 };
 
-ok(Data::Dump::PHP::dump_php($a) . "\n", <<'EOT');
-array(
-  "a" => "/Foo/",
-  "b" => "|abc/|si",
-  "c" => "/ foo /x",
-  "d" => "/foo/msix",
-  "e" => "//",
-  "g" => "|///////|",
-  "h" => "#/|,:#",
-  "i" => "/\\/|,:#/",
-)
+ok(Data::Dump::Ruby::dump_ruby($a) . "\n", <<'EOT');
+{
+  "a" => %r/Foo/,
+  "b" => %r|abc/|mi,
+  "c" => %r/ foo /x,
+  "d" => %r/foo/mix,
+  "e" => %r//,
+  "g" => %r|///////|,
+  "h" => %r#/|,:#,
+  "i" => %r/\/|,:#/,
+}
 EOT
 
-#print Data::Dump::PHP::dump_php($a), "\n";
+#print Data::Dump::Ruby::dump_ruby($a), "\n";
