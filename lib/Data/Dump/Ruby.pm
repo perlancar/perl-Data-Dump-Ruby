@@ -14,6 +14,8 @@ require Exporter;
 @EXPORT = qw(dd_ruby ddx_ruby);
 @EXPORT_OK = qw(dump_ruby pp_ruby quote_ruby);
 
+# VERSION
+
 $DEBUG = 0;
 
 use overload ();
